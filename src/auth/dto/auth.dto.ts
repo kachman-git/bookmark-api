@@ -22,3 +22,11 @@ export class AuthDto {
   })
   password: string;
 }
+
+export class VerifySignupOtpDto {
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  otp: string;
+}
