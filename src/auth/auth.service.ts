@@ -1,9 +1,9 @@
+import { ConfigService } from '@nestjs/config';
 import {
   ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as agron from 'argon2';
@@ -16,8 +16,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-    private readonly redisService: RedisService,
-    private readonly mailService: MailService,
+    private redisService: RedisService,
+    private mailService: MailService,
     private jwt: JwtService,
   ) {}
 

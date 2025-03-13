@@ -9,7 +9,14 @@ import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
 
 @Module({
-  imports: [AuthModule, UsersModule, PrismaModule, ConfigModule.forRoot(), RedisModule, MailModule],
+  imports: [
+    AuthModule,
+    UsersModule,
+    PrismaModule,
+    ConfigModule.forRoot({ isGlobal: true }),
+    RedisModule,
+    MailModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
