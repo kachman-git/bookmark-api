@@ -14,7 +14,7 @@ import { MailService } from '../mail/mail.service';
 @Injectable()
 export class AuthService {
   constructor(
-    private prima: PrismaService,
+    private prisma: PrismaService,
     private config: ConfigService,
     private readonly redisService: RedisService,
     private readonly mailService: MailService,
@@ -22,7 +22,7 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prima.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -34,7 +34,7 @@ export class AuthService {
   }
 
   async signup(email: string, password: string) {
-    const existing = await this.prima.user.findUnique({ where: { email } });
+    const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
       throw new ConflictException('User already exists');
     }
@@ -42,7 +42,8 @@ export class AuthService {
     const otp = speakeasy.totp({
       secret: this.config.get('OTP_SECRET'),
       encoding: 'base32',
-      step: 300,
+      step: 300, // OTP valid for 5 minutes
+      digits: 6, // 6-digit OTP
     });
     const tempData = { hashedPassword, otp };
     await this.redisService.set(
@@ -50,12 +51,14 @@ export class AuthService {
       JSON.stringify(tempData),
       300,
     );
-    await this.mailService.sendOtp(email, otp);
+    await this.mailService.sendOTP(email, otp);
     return {
       message: 'OTP sent to your email. Please verify to complete signup.',
     };
   }
 
+  // Verify Signup OTP: User submits the OTP.
+  // If the OTP is valid, create the user and issue a JWT token.
   async verifySignupOtp(email: string, otp: string) {
     const dataStr = await this.redisService.get(`signup:${email}`);
     if (!dataStr) {
@@ -65,7 +68,7 @@ export class AuthService {
     if (data.otp !== otp) {
       throw new UnauthorizedException('Invalid OTP');
     }
-    const newUser = await this.prima.user.create({
+    const newUser = await this.prisma.user.create({
       data: { email, hash: data.hashedPassword },
     });
 
@@ -74,12 +77,13 @@ export class AuthService {
     return this.generateToken(newUser.id, newUser.email);
   }
 
+  // Helper method to generate JWT token.
   async generateToken(userId: string, email: string) {
     const payload = { sub: userId, email };
-    const secreat = this.config.get('JWT_SECRET');
+    const secret = this.config.get('JWT_SECRET');
 
     const token = await this.jwt.signAsync(payload, {
-      secret: secreat,
+      secret: secret,
       expiresIn: '15m',
     });
 

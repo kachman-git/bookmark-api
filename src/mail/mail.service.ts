@@ -1,21 +1,26 @@
-// mail.service.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as sgMail from '@sendgrid/mail';
+import FormData from 'form-data';
+import Mailgun from 'mailgun.js';
 
 @Injectable()
 export class MailService {
-  constructor(private config: ConfigService) {
-    sgMail.setApiKey(this.config.get('SENDGRID_API_KEY'));
+  private mg;
+  private config: ConfigService;
+  constructor(config: ConfigService) {
+    const mailgun = new Mailgun(FormData);
+    this.mg = mailgun.client({
+      username: 'api',
+      key: config.get('MAILGUN_API_KEY'), // Your Mailgun API Key
+    });
   }
 
-  async sendOtp(email: string, otp: string): Promise<void> {
-    const msg = {
+  async sendOTP(email: string, otp: string) {
+    return this.mg.messages.create(this.config.get('MAILGUN_DOMAIN'), {
+      from: `YourApp <noreply@${this.config.get('MAILGUN_DOMAIN')}>`,
       to: email,
-      from: this.config.get('EMAIL_FROM'), // Must be a verified sender
-      subject: 'Your Signup OTP Code',
-      text: `Your OTP code is: ${otp}. It is valid for 5 minutes.`,
-    };
-    await sgMail.send(msg);
+      subject: 'Your OTP Code',
+      text: `Your OTP code is: ${otp}. It will expire in 5 minutes.`,
+    });
   }
 }
