@@ -1,220 +1,122 @@
-import {
-  Injectable,
-  ConflictException,
-  UnauthorizedException,
-  NotFoundException,
-} from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import * as argon from 'argon2';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as argon from 'argon2';
 import { MailService } from '../mail/mail.service';
-import { RegisterDto, LoginDto } from './dto';
-import * as crypto from 'crypto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { RegisterDto } from './dto/register.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private prisma: PrismaService,
-    private jwt: JwtService,
-    private config: ConfigService,
-    private mailService: MailService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
+    private readonly mailService: MailService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async register(dto: RegisterDto) {
-    // Check if email is already registered
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
+    if (existingUser) throw new ConflictException('Email already registered');
 
-    if (existingUser) {
-      throw new ConflictException('Email already registered');
-    }
+    const hashedPassword = await argon.hash(dto.password);
+    const otp = this.generateOTP();
 
-    // Hash password
-    const hash = await argon.hash(dto.password);
-
-    // Create user with profile
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
-        password: hash,
-        provider: 'email',
-        profile: {
-          create: {
-            firstName: dto.name,
-          },
-        },
+        password: hashedPassword,
+        otp,
+        otpExpiry: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       },
     });
 
-    // Generate verification token
-    const verificationToken = await this.jwt.signAsync(
-      { sub: user.id },
-      {
-        secret: this.config.get('JWT_SECRET'),
-        expiresIn: '1d',
-      },
-    );
-
-    // Send verification email
-    await this.mailService.sendEmailVerification(
-      user.email,
-      user.name,
-      verificationToken,
-    );
-
-    return {
-      message: 'Registration successful. Check your email for verification.',
-    };
+    await this.mailService.sendVerificationEmail(user.email, otp);
+    return { message: 'OTP sent to email' };
   }
 
-  async login(dto: LoginDto) {
-    // Find user by email
+  async verifyOtp(otp: string) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: {
+        otp,
+      },
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user || user.otp !== otp || user.otpExpiry < new Date()) {
+      throw new BadRequestException('Invalid or expired OTP');
     }
 
-    // Verify password
-    const passwordValid = await argon.verify(user.password, dto.password);
-    if (!passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    // Generate tokens
-    return this.generateTokens(user);
-  }
-
-  async handleOAuthLogin(profile: any) {
-    // Find or create user
-    const user = await this.prisma.user.upsert({
+    await this.prisma.user.update({
       where: {
-        provider_providerId: {
-          provider: profile.provider,
-          providerId: profile.id,
-        },
+        id: user.id,
       },
-      update: {
-        email: profile.email,
-        profile: {
-          update: {
-            firstName: profile.displayName,
-          },
-        },
-      },
-      create: {
-        provider: profile.provider,
-        providerId: profile.id,
-        email: profile.email,
-        isVerified: true,
-        profile: {
-          create: {
-            firstName: profile.displayName,
-          },
-        },
-      },
-    });
-
-    return this.generateTokens(user);
-  }
-
-  async verifyEmail(token: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        emailVerificationToken: token,
-        emailVerificationExp: { gt: new Date() },
-      },
-    });
-
-    if (!user) throw new NotFoundException('Invalid or expired token');
-
-    return this.prisma.user.update({
-      where: { id: user.id },
       data: {
+        otp: null,
+        otpExpiry: null,
         isVerified: true,
-        emailVerificationToken: null,
-        emailVerificationExp: null,
       },
     });
+    return { message: 'Account verified. Please sign in' };
   }
 
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) return null;
+    if (!user || !user.isVerified) return null;
 
-    const passwordValid = await argon.verify(user.password, password);
-    return passwordValid ? user : null;
+    const valid = await argon.verify(user.password, password);
+    return valid ? user : null;
   }
 
-  async requestAccountDeletion(userId: string, email: string) {
-    const token = crypto.randomBytes(32).toString('hex');
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        deleteAccountToken: token,
-        deleteAccountTokenExp: new Date(Date.now() + 3600000), // 1 hour
-      },
+  async login(dto: LoginDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
     });
 
-    await this.mailService.sendDeletionConfirmation(email, token);
-    return { message: 'Deletion confirmation email sent' };
+    const hash = await argon.verify(user.password, dto.password);
+
+    if (!user || !user.isVerified || !hash)
+      throw new UnauthorizedException('Invalid credentials');
+    await this.generateTokens(user.id, user.email);
   }
 
-  async confirmAccountDeletion(token: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        deleteAccountToken: token,
-        deleteAccountTokenExp: { gt: new Date() },
-      },
-      include: { profile: true },
-    });
+  async refreshTokens(userId: number, refreshToken: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId } });
+    if (!user || !user.refreshToken) throw new UnauthorizedException();
 
-    if (!user) throw new NotFoundException('Invalid or expired token');
+    const valid = await argon.verify(user.refreshToken, refreshToken);
+    if (!valid) throw new UnauthorizedException();
 
-    // Delete user (cascades to profile and refresh tokens)
-    await this.prisma.user.delete({ where: { id: user.id } });
-
-    await this.mailService.sendAccountDeletedConfirmation(
-      user.email,
-      user.profile?.firstName || 'User',
-    );
-
-    return { message: 'Account permanently deleted' };
+    return this.generateTokens(user.id, user.email);
   }
 
-  private async generateTokens(user: any) {
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      isVerified: user.isVerified,
-    };
+  private async generateTokens(id: number, email: string) {
+    const payload = { sub: id, email: email };
 
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(payload, {
-        secret: this.config.get('JWT_SECRET'),
-        expiresIn: '15m',
-      }),
-      this.jwt.signAsync(payload, {
-        secret: this.config.get('JWT_REFRESH_SECRET'),
-        expiresIn: '7d',
-      }),
-    ]);
-
-    // Store refresh token
-    await this.prisma.refreshToken.create({
-      data: {
-        token: await argon.hash(refreshToken),
-        userId: user.id,
-      },
+    const accessToken = this.jwt.sign(payload, {
+      expiresIn: '15m',
+      secret: this.config.get('JWT_ACCESS_SECRET'),
     });
 
-    return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    };
+    const refreshToken = this.jwt.sign(payload, {
+      expiresIn: '7d',
+      secret: this.config.get('JWT_REFRESH_SECRET'),
+    });
+
+    const hashToken = await argon.hash(refreshToken);
+    await this.prisma.user.update({ where: { id }, data: { refreshToken } });
+
+    return { accessToken, refreshToken };
+  }
+
+  private generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 }

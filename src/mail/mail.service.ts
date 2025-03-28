@@ -9,16 +9,12 @@ export class MailService {
     private config: ConfigService,
   ) {}
 
-  async sendEmailVerification(email: string, name: string, token: string) {
-    const url = `${this.config.get('auth.frontendUrl')}/verify-email?token=${token}`;
-
+  async sendVerificationEmail(email: string, token: string) {
     await this.mailerService.sendMail({
       to: email,
       subject: 'Verify Your Email Address',
       template: 'email-verification',
       context: {
-        name,
-        url,
         supportEmail: this.config.get('MAIL_SUPPORT_ADDRESS'),
       },
     });
