@@ -3,13 +3,10 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
-import { GithubStrategy } from './strategies/github.strategy';
-import { GoogleStrategy } from './strategies/google.strategy';
 import { AuthController } from './auth.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailModule } from '../mail/mail.module';
 import { ConfigModule } from '@nestjs/config';
-import { TokenService } from './token.service';
 import { MailService } from 'src/mail/mail.service';
 
 @Module({
@@ -23,6 +20,6 @@ import { MailService } from 'src/mail/mail.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, TokenService, MailService],
+  providers: [AuthService, MailService],
 })
 export class AuthModule {}
