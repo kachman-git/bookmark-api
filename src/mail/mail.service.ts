@@ -15,6 +15,7 @@ export class MailService {
       subject: 'Verify Your Email Address',
       template: 'email-verification',
       context: {
+        year: new Date().getFullYear(),
         otp,
         supportEmail: this.config.get('MAIL_SUPPORT_ADDRESS'),
       },
