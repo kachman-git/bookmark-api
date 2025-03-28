@@ -67,14 +67,6 @@ export class AuthService {
     return { message: 'Account verified. Please sign in' };
   }
 
-  async validateUser(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !user.isVerified) return null;
-
-    const valid = await argon.verify(user.password, password);
-    return valid ? user : null;
-  }
-
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -84,7 +76,7 @@ export class AuthService {
 
     if (!user || !user.isVerified || !hash)
       throw new UnauthorizedException('Invalid credentials');
-    await this.generateTokens(user.id, user.email);
+    return await this.generateTokens(user.id, user.email);
   }
 
   async refreshTokens(userId: number, refreshToken: string) {
