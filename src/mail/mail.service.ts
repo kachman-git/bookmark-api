@@ -21,4 +21,16 @@ export class MailService {
       },
     });
   }
+
+  async sendPasswordResetEmail(email: string, resetUrl: string) {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Password Reset Request',
+      template: 'reset-password',
+      context: {
+        resetUrl,
+        year: new Date().getFullYear(),
+      },
+    });
+  }
 }

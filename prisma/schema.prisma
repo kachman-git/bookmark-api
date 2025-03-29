@@ -24,6 +24,20 @@ model User {
   otp          String?   @unique
   otpExpiry    DateTime?
   refreshToken String?
+  passwordResetToken   String?   @unique
+  passwordResetExpires DateTime?
+  Bookmarks    Bookmark[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+model Bookmark{
+  id        Int      @id @default(autoincrement())
+  title     String
+  url       String
+  discription String?
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
