@@ -150,18 +150,21 @@ export class AuthService {
   private async generateTokens(id: number, email: string) {
     const payload = { sub: id, email: email };
 
-    const accessToken = this.jwt.sign(payload, {
+    const accessToken = await this.jwt.signAsync(payload, {
       expiresIn: '15m',
-      secret: this.config.get('JWT_ACCESS_SECRET'),
+      secret: this.config.get('JWT_SECRET'),
     });
 
-    const refreshToken = this.jwt.sign(payload, {
+    const refreshToken = await this.jwt.signAsync(payload, {
       expiresIn: '7d',
       secret: this.config.get('JWT_REFRESH_SECRET'),
     });
 
     const hashToken = await argon.hash(refreshToken);
-    await this.prisma.user.update({ where: { id }, data: { refreshToken } });
+    await this.prisma.user.update({
+      where: { id },
+      data: { refreshToken },
+    });
 
     return { accessToken, refreshToken };
   }
