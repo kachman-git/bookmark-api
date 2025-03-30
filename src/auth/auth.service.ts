@@ -88,7 +88,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
 
     const valid = await argon.verify(user.refreshToken, refreshToken);
-    if (!valid) throw new UnauthorizedException();
+    if (!valid) throw new UnauthorizedException({ message: 'Invalid token' });
 
     return this.generateTokens(user.id, user.email);
   }
@@ -163,7 +163,7 @@ export class AuthService {
     const hashToken = await argon.hash(refreshToken);
     await this.prisma.user.update({
       where: { id },
-      data: { refreshToken },
+      data: { refreshToken: hashToken },
     });
 
     return { accessToken, refreshToken };
