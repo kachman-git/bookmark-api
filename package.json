@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "nest build && npm run copy-templates",
+    "build": "nest build",
     "copy-templates": "copyfiles -u 1 src/**/*.hbs dist/",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -40,6 +40,7 @@
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
+    "postmark": "^4.0.5",
     "prisma": "^6.5.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1"
